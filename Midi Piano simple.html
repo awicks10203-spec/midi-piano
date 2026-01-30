@@ -1,0 +1,490 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Keyboard Player</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Custom scrollbar for the keyboard container */
+        .keyboard-scroll::-webkit-scrollbar {
+            height: 8px;
+        }
+        .keyboard-scroll::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 4px;
+        }
+        .keyboard-scroll::-webkit-scrollbar-thumb {
+            background: #c1c1c1;
+            border-radius: 4px;
+        }
+        .keyboard-scroll::-webkit-scrollbar-thumb:hover {
+            background: #a8a8a8;
+        }
+
+
+        /* Piano Key Styling */
+        .white-key {
+            width: 3rem;
+            height: 10rem;
+            background: white;
+            border: 1px solid #e5e7eb;
+            border-bottom-left-radius: 0.25rem;
+            border-bottom-right-radius: 0.25rem;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            position: relative;
+            z-index: 10;
+            transition: background-color 0.1s, transform 0.1s;
+            /* Label Alignment */
+            display: flex;
+            justify-content: center;
+            align-items: flex-end;
+            padding-bottom: 0.5rem;
+            color: #94a3b8; /* slate-400 */
+            font-size: 0.75rem; /* text-xs */
+            font-weight: 700;
+        }
+        
+        /* Utility to hide labels */
+        .keyboard-container.hide-labels .white-key span {
+            display: none;
+        }
+
+
+        .white-key:active, .white-key.active {
+            background: #bfdbfe; /* blue-200 */
+            transform: translateY(2px);
+            box-shadow: 0 2px 4px -1px rgba(0, 0, 0, 0.1);
+        }
+
+
+        .black-key {
+            width: 1.8rem;
+            height: 6rem;
+            background: #1f2937; /* gray-800 */
+            position: absolute;
+            top: 0;
+            left: -0.9rem; /* Half width to overlap */
+            z-index: 20;
+            border-bottom-left-radius: 0.25rem;
+            border-bottom-right-radius: 0.25rem;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
+            transition: background-color 0.1s, transform 0.1s;
+        }
+        .black-key:active, .black-key.active {
+            background: #3b82f6; /* blue-500 */
+            transform: scale(0.98) translateY(1px);
+        }
+
+
+        /* Toggle Switch Styling */
+        .switch {
+            position: relative;
+            display: inline-block;
+            width: 40px;
+            height: 20px;
+        }
+        .switch input { opacity: 0; width: 0; height: 0; }
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background-color: #cbd5e1;
+            transition: .4s;
+            border-radius: 20px;
+        }
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 14px; width: 14px;
+            left: 3px; bottom: 3px;
+            background-color: white;
+            transition: .4s;
+            border-radius: 50%;
+        }
+        input:checked + .slider { background-color: #4f46e5; }
+        input:checked + .slider:before { transform: translateX(20px); }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 font-sans h-screen flex flex-col overflow-hidden">
+
+
+    <!-- Header & Controls -->
+    <header class="bg-white border-b border-slate-200 p-4 shadow-sm z-30">
+        <div class="max-w-6xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
+            
+            <div class="flex items-center gap-3">
+                <div class="bg-indigo-600 text-white p-2 rounded-lg shadow-sm">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2c-1.7 0-3 1.2-3 2.6v6.8c0 1.4 1.3 2.6 3 2.6s3-1.2 3-2.6V4.6C15 3.2 13.7 2 12 2z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+                </div>
+                <div>
+                    <h1 class="text-xl font-bold text-slate-900">Keyboard Player</h1>
+                    <p id="connection-status" class="text-xs text-amber-600 font-medium flex items-center gap-1">
+                        <span class="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span>
+                        Waiting for MIDI...
+                    </p>
+                </div>
+            </div>
+
+
+            <div class="flex flex-wrap items-center gap-4 bg-slate-100 p-2 rounded-xl">
+                <!-- Audio Context Starter -->
+                <button id="start-audio-btn" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-semibold transition shadow-sm">
+                    Start Audio Engine
+                </button>
+
+
+                <!-- Sound Preset Selector -->
+                <div class="flex flex-col">
+                    <label class="text-[10px] uppercase font-bold text-slate-400 mb-1 ml-1">Instrument</label>
+                    <select id="sound-preset" class="bg-white border border-slate-300 text-slate-700 text-sm rounded-lg focus:ring-indigo-500 focus:border-indigo-500 block p-1.5 min-w-[140px]">
+                        <optgroup label="Simulated">
+                            <option value="piano" selected>Piano</option>
+                            <option value="organ">Organ</option>
+                            <option value="pluck">Music Box</option>
+                            <option value="fat-synth">Fat Synth</option>
+                        </optgroup>
+                        <optgroup label="Waveforms">
+                            <option value="triangle">Triangle</option>
+                            <option value="sine">Sine</option>
+                            <option value="square">Square</option>
+                            <option value="sawtooth">Sawtooth</option>
+                        </optgroup>
+                    </select>
+                </div>
+
+
+                <!-- Labels Toggle -->
+                <div class="flex flex-col items-center">
+                    <label class="text-[10px] uppercase font-bold text-slate-400 mb-1">Labels</label>
+                    <label class="switch">
+                        <input type="checkbox" id="toggle-labels" checked>
+                        <span class="slider"></span>
+                    </label>
+                </div>
+
+
+                <!-- Volume Slider -->
+                <div class="flex flex-col w-32">
+                    <label class="text-[10px] uppercase font-bold text-slate-400 mb-1 ml-1">Volume</label>
+                    <input id="volume" type="range" min="0" max="1" step="0.01" value="0.3" class="w-full h-2 bg-slate-300 rounded-lg appearance-none cursor-pointer accent-indigo-600">
+                </div>
+            </div>
+        </div>
+    </header>
+
+
+    <!-- Main Content Area -->
+    <main class="flex-1 relative bg-slate-100 flex flex-col items-center justify-center p-4">
+        
+        <!-- MIDI Log Display -->
+        <div class="absolute top-4 left-0 right-0 text-center pointer-events-none">
+            <div id="note-display" class="inline-block px-6 py-2 bg-white/80 backdrop-blur-sm rounded-full shadow-sm text-slate-500 text-sm font-medium opacity-0 transition-opacity duration-300">
+                Playing: <span id="current-note-name" class="font-bold text-indigo-600">--</span>
+            </div>
+        </div>
+
+
+        <!-- The Piano Keyboard -->
+        <div id="keyboard-container" class="keyboard-container w-full max-w-6xl bg-white p-6 rounded-2xl shadow-xl border border-slate-200 overflow-hidden">
+            <div class="keyboard-scroll overflow-x-auto pb-4">
+                <div id="keyboard" class="flex relative select-none h-44 pl-4 pr-4 mx-auto w-max">
+                    <!-- Keys are generated by JS -->
+                </div>
+            </div>
+        </div>
+
+
+        <p class="mt-6 text-slate-400 text-sm text-center max-w-md">
+            Tip: Plug in your MIDI keyboard and press "Start Audio Engine".<br>
+            If no keyboard is available, you can click the keys above.
+        </p>
+    </main>
+
+
+    <footer class="bg-white border-t border-slate-200 py-3 text-center text-slate-500 text-xs font-medium z-30">
+        Designed by Nightingale Primary School
+    </footer>
+
+
+    <script>
+        /**
+         * Application Logic
+         */
+        
+        // --- Audio Engine ---
+        let audioCtx;
+        let masterGain;
+        const activeVoices = {}; // Tracks oscillators/gains per MIDI note
+
+
+        const NOTE_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+
+
+        async function initAudio() {
+            if (audioCtx) return;
+            const AudioContext = window.AudioContext || window.webkitAudioContext;
+            audioCtx = new AudioContext();
+
+
+            masterGain = audioCtx.createGain();
+            masterGain.gain.value = document.getElementById('volume').value;
+            masterGain.connect(audioCtx.destination);
+
+
+            document.getElementById('start-audio-btn').textContent = "Audio Active";
+            document.getElementById('start-audio-btn').classList.replace('bg-indigo-600', 'bg-emerald-500');
+            document.getElementById('start-audio-btn').classList.replace('hover:bg-indigo-700', 'hover:bg-emerald-600');
+            document.getElementById('start-audio-btn').disabled = true;
+
+
+            if (audioCtx.state === 'suspended') {
+                await audioCtx.resume();
+            }
+        }
+
+
+        function playNote(midiNote, velocity = 127) {
+            if (!audioCtx) return;
+
+
+            const freq = 440 * Math.pow(2, (midiNote - 69) / 12);
+            const preset = document.getElementById('sound-preset').value;
+            const velocityGain = velocity / 127;
+            const now = audioCtx.currentTime;
+
+
+            if (activeVoices[midiNote]) stopNote(midiNote);
+
+
+            const nodes = []; 
+            const noteGain = audioCtx.createGain();
+            noteGain.connect(masterGain);
+
+
+            if (preset === 'piano') {
+                // Multi-harmonic percussive sound
+                const osc = audioCtx.createOscillator();
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(freq, now);
+                
+                // Attack Decay Sustain Release (ADSR) for piano
+                noteGain.gain.setValueAtTime(0, now);
+                noteGain.gain.linearRampToValueAtTime(velocityGain, now + 0.005); // Hit
+                noteGain.gain.exponentialRampToValueAtTime(velocityGain * 0.4, now + 0.2); // Settle
+                noteGain.gain.exponentialRampToValueAtTime(0.001, now + 2.0); // Slow fade
+                
+                osc.connect(noteGain);
+                osc.start();
+                nodes.push(osc);
+            } 
+            else if (preset === 'organ') {
+                // Additive synthesis: Base + Octave + Fifth
+                const harmonics = [
+                    { f: 1.0, g: 0.5 },
+                    { f: 2.0, g: 0.3 },
+                    { f: 1.5, g: 0.2 }
+                ];
+                
+                harmonics.forEach(h => {
+                    const osc = audioCtx.createOscillator();
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(freq * h.f, now);
+                    
+                    const hGain = audioCtx.createGain();
+                    hGain.gain.setValueAtTime(h.g * velocityGain, now);
+                    
+                    osc.connect(hGain);
+                    hGain.connect(noteGain);
+                    osc.start();
+                    nodes.push(osc);
+                });
+                
+                noteGain.gain.setValueAtTime(0, now);
+                noteGain.gain.linearRampToValueAtTime(1, now + 0.02); // Quick organ onset
+            }
+            else if (preset === 'pluck') {
+                const osc = audioCtx.createOscillator();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(freq, now);
+                noteGain.gain.setValueAtTime(0, now);
+                noteGain.gain.linearRampToValueAtTime(velocityGain, now + 0.005);
+                noteGain.gain.exponentialRampToValueAtTime(0.001, now + 1.2);
+                osc.connect(noteGain);
+                osc.start();
+                nodes.push(osc);
+            } 
+            else if (preset === 'fat-synth') {
+                const detunes = [-8, 0, 8];
+                detunes.forEach(d => {
+                    const osc = audioCtx.createOscillator();
+                    osc.type = 'sawtooth';
+                    osc.frequency.setValueAtTime(freq, now);
+                    osc.detune.setValueAtTime(d, now);
+                    osc.connect(noteGain);
+                    osc.start();
+                    nodes.push(osc);
+                });
+                noteGain.gain.setValueAtTime(0, now);
+                noteGain.gain.linearRampToValueAtTime(velocityGain * 0.4, now + 0.05);
+            } 
+            else {
+                const osc = audioCtx.createOscillator();
+                osc.type = preset;
+                osc.frequency.setValueAtTime(freq, now);
+                noteGain.gain.setValueAtTime(0, now);
+                noteGain.gain.linearRampToValueAtTime(velocityGain, now + 0.01);
+                osc.connect(noteGain);
+                osc.start();
+                nodes.push(osc);
+            }
+
+
+            activeVoices[midiNote] = { nodes, noteGain, type: preset };
+            highlightKey(midiNote, true);
+            showNoteName(midiNote);
+        }
+
+
+        function stopNote(midiNote) {
+            if (!audioCtx || !activeVoices[midiNote]) return;
+
+
+            const { nodes, noteGain } = activeVoices[midiNote];
+            const now = audioCtx.currentTime;
+            const releaseTime = 0.15;
+
+
+            noteGain.gain.cancelScheduledValues(now);
+            noteGain.gain.setValueAtTime(noteGain.gain.value, now);
+            noteGain.gain.exponentialRampToValueAtTime(0.001, now + releaseTime);
+
+
+            nodes.forEach(node => {
+                node.stop(now + releaseTime);
+                setTimeout(() => node.disconnect(), (releaseTime * 1000) + 100);
+            });
+
+
+            setTimeout(() => {
+                noteGain.disconnect();
+            }, (releaseTime * 1000) + 100);
+
+
+            delete activeVoices[midiNote];
+            highlightKey(midiNote, false);
+        }
+
+
+        // --- MIDI Handling ---
+
+
+        function onMIDISuccess(midiAccess) {
+            updateConnectionStatus(midiAccess.inputs.size > 0, midiAccess.inputs.size);
+            midiAccess.onstatechange = () => updateConnectionStatus(midiAccess.inputs.size > 0, midiAccess.inputs.size);
+            for (let input of midiAccess.inputs.values()) {
+                input.onmidimessage = (msg) => {
+                    const [command, note, velocity] = msg.data;
+                    const type = command & 0xf0;
+                    if (type === 144 && velocity > 0) playNote(note, velocity);
+                    else if (type === 128 || (type === 144 && velocity === 0)) stopNote(note);
+                };
+            }
+        }
+
+
+        function updateConnectionStatus(connected, count = 0) {
+            const statusEl = document.getElementById('connection-status');
+            if (connected) {
+                statusEl.className = "text-xs text-emerald-600 font-medium flex items-center gap-1";
+                statusEl.innerHTML = `<span class="w-2 h-2 rounded-full bg-emerald-500"></span> MIDI Connected (${count})`;
+            } else {
+                statusEl.className = "text-xs text-amber-600 font-medium flex items-center gap-1";
+                statusEl.innerHTML = `<span class="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span> Connect Keyboard`;
+            }
+        }
+
+
+        // --- Visuals ---
+
+
+        function createKeyboard() {
+            const keyboardEl = document.getElementById('keyboard');
+            for (let i = 36; i <= 84; i++) {
+                const noteName = NOTE_NAMES[i % 12];
+                if (!noteName.includes("#")) {
+                    const key = document.createElement('div');
+                    key.className = 'white-key';
+                    key.id = `key-${i}`;
+                    const label = document.createElement('span');
+                    label.textContent = noteName;
+                    label.className = 'pointer-events-none select-none';
+                    key.appendChild(label);
+                    addInteractionListeners(key, i);
+                    keyboardEl.appendChild(key);
+
+
+                    if (NOTE_NAMES[(i + 1) % 12].includes("#")) {
+                        const blackKey = document.createElement('div');
+                        blackKey.className = 'black-key';
+                        blackKey.id = `key-${i+1}`;
+                        addInteractionListeners(blackKey, i+1);
+                        blackKey.style.left = "auto";
+                        blackKey.style.right = "-0.9rem"; 
+                        key.appendChild(blackKey);
+                    }
+                }
+            }
+        }
+
+
+        function addInteractionListeners(el, note) {
+            const start = (e) => {
+                e.preventDefault(); e.stopPropagation();
+                if(!audioCtx) initAudio();
+                else if(audioCtx.state === 'suspended') audioCtx.resume();
+                playNote(note);
+            };
+            const end = (e) => { e.preventDefault(); e.stopPropagation(); stopNote(note); };
+            el.addEventListener('mousedown', start);
+            el.addEventListener('mouseup', end);
+            el.addEventListener('mouseleave', end);
+            el.addEventListener('touchstart', start);
+            el.addEventListener('touchend', end);
+        }
+
+
+        function highlightKey(midiNote, isActive) {
+            const key = document.getElementById(`key-${midiNote}`);
+            if (key) isActive ? key.classList.add('active') : key.classList.remove('active');
+        }
+
+
+        function showNoteName(midiNote) {
+            const name = NOTE_NAMES[midiNote % 12];
+            const octave = Math.floor(midiNote / 12) - 1;
+            const display = document.getElementById('note-display');
+            document.getElementById('current-note-name').textContent = `${name}${octave}`;
+            display.classList.remove('opacity-0');
+            clearTimeout(window.noteDisplayTimeout);
+            window.noteDisplayTimeout = setTimeout(() => display.classList.add('opacity-0'), 2000);
+        }
+
+
+        // --- Event Listeners ---
+
+
+        document.getElementById('start-audio-btn').addEventListener('click', initAudio);
+        document.getElementById('volume').addEventListener('input', (e) => {
+            if (masterGain) masterGain.gain.setTargetAtTime(e.target.value, audioCtx.currentTime, 0.01);
+        });
+        document.getElementById('toggle-labels').addEventListener('change', (e) => {
+            document.getElementById('keyboard-container').classList.toggle('hide-labels', !e.target.checked);
+        });
+
+
+        createKeyboard();
+        if (navigator.requestMIDIAccess) navigator.requestMIDIAccess().then(onMIDISuccess, () => {});
+    </script>
+</body>
+</html>
